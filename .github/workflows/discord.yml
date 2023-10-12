@@ -1,0 +1,22 @@
+name: Send Discord Message Through Webhook
+
+on:
+  repository_dispatch:
+    types: [discord]
+  workflow_dispatch:
+    inputs:
+      content:
+        description: 'Message Content'
+        required: true
+        default: 'Hello World!'
+
+jobs:
+  message:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Discord Webhook Action
+      uses: tsickert/discord-webhook@v5.3.0
+      with:
+        webhook-url: ${{ secrets.WEBHOOK_URL }}
+        content: |
+          ${{ github.event.inputs.content || github.event.client_payload.content }}

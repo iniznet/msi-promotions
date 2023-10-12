@@ -1,0 +1,59 @@
+name: Routine
+
+on:
+  schedule:
+    - cron: '0 5 * * *' # Schedule at 12 PM UTC+7 (5 AM UTC)
+  workflow_dispatch:
+  
+jobs:
+  routine:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Get Active Issues
+        run: |
+          echo "Getting active issues for ${{ github.repository }}"
+
+          ISSUES=$(curl -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/issues?state=open&labels=active)
+        
+          echo "Saving isseus to a json file"
+          echo "$ISSUES" > issues.json
+
+      - name: Loop Over Active Issues and Trigger Discord Webhook
+        run: |
+          echo "Fetching issues from issues.json"
+          ISSUES=$(cat issues.json)
+
+          # loop over the issues
+          echo "Looping over issues"
+          jq -c '.[]' <<< "$ISSUES" | while read issue; do
+            issue_content=$(jq -r <<< "$issue")
+            issue_title=$(echo "$issue_content" | jq -r '.title')
+            issue_url=$(echo "$issue_content" | jq -r '.html_url')
+            issue_body=$(echo "$issue_content" | jq -r '.body')
+            
+            # Replace rn to \r\n
+            message_content=$(echo "$issue_body" | sed 's/rn/\\r\\n/g')
+
+            echo "Sending Discord webhook for $issue_title with content $message_content"
+
+            # Dispatch event to Discord workflow with the message content
+            curl -X POST \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              https://api.github.com/repos/${{ github.repository }}/dispatches \
+              -d '{"event_type": "discord", "client_payload": {"content": "'"$message_content"'"}}'
+          done
+
+          echo "Done looping over issues"
+
+      - name: Cleanup
+        run: |
+          echo "Cleaning up"
+          rm issues.json
